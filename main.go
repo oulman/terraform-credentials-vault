@@ -131,7 +131,7 @@ func readSecretFromVault(secretPath string) (string, error) {
 
 	m, ok := secret.Data["data"].(map[string]interface{})
 	if !ok {
-		return "", fmt.Error("unable to map secret data")
+		return "", fmt.Errorf("unable to map secret data")
 	}
 	s := fmt.Sprintf("%v", m["token"])
 
