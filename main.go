@@ -1,9 +1,3 @@
-// terraform-credentials-env is a Terraform credentials helper that reads
-// credentials from the process environment.
-//
-// Specifically, it expects to find environment variables with the prefix
-// TF_TOKEN_ followed by the requested hostname, such as
-// TF_TOKEN_app.terraform.io for Terraform Cloud.
 package main
 
 import (
@@ -137,8 +131,7 @@ func readSecretFromVault(secretPath string) (string, error) {
 
 	m, ok := secret.Data["data"].(map[string]interface{})
 	if !ok {
-		fmt.Printf("%T %#v\n", secret.Data["data"], secret.Data["data"])
-		return "", nil
+		return "", fmt.Error("unable to map secret data")
 	}
 	s := fmt.Sprintf("%v", m["token"])
 
