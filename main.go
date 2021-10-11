@@ -125,8 +125,9 @@ func readSecretFromVault(secretPath string) (string, error) {
 		return "", errors.Wrap(err, fmt.Sprintf("failed to read secret from Vault at %s\n", secretPath))
 	}
 
+	// dont error if we can read a secret for a particular provider such as the Terraform registry
 	if secret == nil {
-		return "", fmt.Errorf("no secret data returned from path=%s", secretPath)
+		return "", nil
 	}
 
 	m, ok := secret.Data["data"].(map[string]interface{})
