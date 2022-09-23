@@ -354,6 +354,9 @@ func ComparePublicKeys(key1Iface, key2Iface crypto.PublicKey) (bool, error) {
 func ParsePublicKeyPEM(data []byte) (interface{}, error) {
 	block, data := pem.Decode(data)
 	if block != nil {
+		if len(bytes.TrimSpace(data)) > 0 {
+			return nil, errutil.UserError{Err: "unexpected trailing data after parsed PEM block"}
+		}
 		var rawKey interface{}
 		var err error
 		if rawKey, err = x509.ParsePKIXPublicKey(block.Bytes); err != nil {
@@ -364,17 +367,15 @@ func ParsePublicKeyPEM(data []byte) (interface{}, error) {
 			}
 		}
 
-		if rsaPublicKey, ok := rawKey.(*rsa.PublicKey); ok {
-			return rsaPublicKey, nil
-		}
-		if ecPublicKey, ok := rawKey.(*ecdsa.PublicKey); ok {
-			return ecPublicKey, nil
-		}
-		if edPublicKey, ok := rawKey.(ed25519.PublicKey); ok {
-			return edPublicKey, nil
+		switch key := rawKey.(type) {
+		case *rsa.PublicKey:
+			return key, nil
+		case *ecdsa.PublicKey:
+			return key, nil
+		case ed25519.PublicKey:
+			return key, nil
 		}
 	}
-
 	return nil, errors.New("data does not contain any valid public keys")
 }
 
@@ -655,14 +656,7 @@ func createCertificate(data *CreationBundle, randReader io.Reader) (*ParsedCertB
 		case Ed25519PrivateKey:
 			certTemplate.SignatureAlgorithm = x509.PureEd25519
 		case ECPrivateKey:
-			switch data.Params.SignatureBits {
-			case 256:
-				certTemplate.SignatureAlgorithm = x509.ECDSAWithSHA256
-			case 384:
-				certTemplate.SignatureAlgorithm = x509.ECDSAWithSHA384
-			case 512:
-				certTemplate.SignatureAlgorithm = x509.ECDSAWithSHA512
-			}
+			certTemplate.SignatureAlgorithm = selectSignatureAlgorithmForECDSA(data.SigningBundle.PrivateKey.Public(), data.Params.SignatureBits)
 		}
 
 		caCert := data.SigningBundle.Certificate
@@ -691,14 +685,7 @@ func createCertificate(data *CreationBundle, randReader io.Reader) (*ParsedCertB
 		case "ed25519":
 			certTemplate.SignatureAlgorithm = x509.PureEd25519
 		case "ec":
-			switch data.Params.SignatureBits {
-			case 256:
-				certTemplate.SignatureAlgorithm = x509.ECDSAWithSHA256
-			case 384:
-				certTemplate.SignatureAlgorithm = x509.ECDSAWithSHA384
-			case 512:
-				certTemplate.SignatureAlgorithm = x509.ECDSAWithSHA512
-			}
+			certTemplate.SignatureAlgorithm = selectSignatureAlgorithmForECDSA(result.PrivateKey.Public(), data.Params.SignatureBits)
 		}
 
 		certTemplate.AuthorityKeyId = subjKeyID
@@ -731,6 +718,33 @@ func createCertificate(data *CreationBundle, randReader io.Reader) (*ParsedCertB
 	}
 
 	return result, nil
+}
+
+func selectSignatureAlgorithmForECDSA(pub crypto.PublicKey, signatureBits int) x509.SignatureAlgorithm {
+	// If signature bits are configured, prefer them to the default choice.
+	switch signatureBits {
+	case 256:
+		return x509.ECDSAWithSHA256
+	case 384:
+		return x509.ECDSAWithSHA384
+	case 512:
+		return x509.ECDSAWithSHA512
+	}
+
+	key, ok := pub.(*ecdsa.PublicKey)
+	if !ok {
+		return x509.ECDSAWithSHA256
+	}
+	switch key.Curve {
+	case elliptic.P224(), elliptic.P256():
+		return x509.ECDSAWithSHA256
+	case elliptic.P384():
+		return x509.ECDSAWithSHA384
+	case elliptic.P521():
+		return x509.ECDSAWithSHA512
+	default:
+		return x509.ECDSAWithSHA256
+	}
 }
 
 var oidExtensionBasicConstraints = []int{2, 5, 29, 19}
