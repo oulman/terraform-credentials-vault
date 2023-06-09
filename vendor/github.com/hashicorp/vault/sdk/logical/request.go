@@ -220,6 +220,10 @@ type Request struct {
 	// this will be the sha256(sorted policies + namespace) associated with the
 	// client token.
 	ClientID string `json:"client_id" structs:"client_id" mapstructure:"client_id" sentinel:""`
+
+	// InboundSSCToken is the token that arrives on an inbound request, supplied
+	// by the vault user.
+	InboundSSCToken string
 }
 
 // Clone returns a deep copy of the request by using copystructure
@@ -373,7 +377,17 @@ type MFACreds map[string][]string
 // InitializationRequest stores the parameters and context of an Initialize()
 // call being made to a logical.Backend.
 type InitializationRequest struct {
-
 	// Storage can be used to durably store and retrieve state.
 	Storage Storage
+}
+
+type CustomHeader struct {
+	Name  string
+	Value string
+}
+
+type CtxKeyInFlightRequestID struct{}
+
+func (c CtxKeyInFlightRequestID) String() string {
+	return "in-flight-request-ID"
 }
